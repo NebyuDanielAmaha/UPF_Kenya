@@ -3,10 +3,10 @@
 This repository contains R code for analyzing data from the 2022 Kenya Demographic and Health Survey (DHS) to assess ultra-processed food consumption and its relationship with nutritional outcomes among children aged 6–23 months.
 
 ## 📁 Structure
-- `recode/`: R scripts for cleaning and recoding DHS data
-- `analysis/`: R scripts for statistical analysis and table generation
+- `01_recode.R`: R scripts for cleaning and recoding DHS data
+- `02_analysis_tables.R`: R scripts for statistical analysis and table generation
 
-- R 4.1+
+- R 4.4+
 
 ## 📦 Required R Packages
 
