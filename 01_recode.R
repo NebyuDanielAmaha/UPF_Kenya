@@ -1,8 +1,3 @@
-# 01_recode.R
-# Purpose: Prepare and recode variables from 2022 Kenya DHS for children aged 6–23 months
-# Author: Nebyu D. Amaha
-# Date: 2025-06-11
-
 library(haven)
 library(here)
 library(dplyr)
@@ -16,6 +11,11 @@ library(tableone)
 library(epiDisplay)
 library(epitools)
 library(ggplot2)
+library(MissMech)
+library(mice)
+library(MatchIt)
+library(cobalt)
+library(broom)
 
 #import the data
 df <- read_dta("KEKR8CFL.DTA")
@@ -32,6 +32,7 @@ df <- df %>%
 #create survey weight
 df <- df %>% mutate(wt = v005/1000000)
 
+#*****PART 1******
 #Outcome variables
 #Stunting
 df <- df %>%
@@ -77,7 +78,7 @@ df <- df %>%
   set_value_labels(nt_ch_ovwt = c("Yes" = 1, "No"=0  )) %>%
   set_variable_labels(nt_ch_ovwt = "Underweight child under 5 years")
 
-
+#**PART 2******
 #*******Covariates****#
 #Co-variates
 
@@ -106,6 +107,10 @@ df <- df %>%
   ),
   levels = c(1, 2, 3),
   labels = c("15–24 years", "25–34 years", "35–49 years"))) %>%
+  # Maternal education
+  mutate(mom_edu = factor(v106,
+                          levels = 0:3,
+                          labels = c("No education", "Primary", "Secondary", "Higher"))) %>%
   
   # Fever (binary)
   mutate(fever = factor(case_when(
@@ -189,11 +194,25 @@ df <- df %>%
     )
   )
 
-#Currently breastfeeding status
-#Dietary Diversity
-#are below
+#clean and recode BMI
+df <- df %>%
+  mutate(bmi = ifelse(v445 == 9998, NA, v445 / 100))
 
-# *** Breastfeeding and complemenatry feeding ***
+#drop NAs
+df_bmi <- df %>% filter(!is.na(bmi))
+
+#categorize BMI
+df <- df %>%
+  mutate(bmi_cat = factor(case_when(
+    bmi < 18.5 ~ "Underweight",
+    bmi >= 18.5 & bmi < 25 ~ "Normal",
+    bmi >= 25 & bmi < 30 ~ "Overweight",
+    bmi >= 30 ~ "Obese"
+  ),
+  levels = c("Underweight", "Normal", "Overweight", "Obese")))
+
+
+# *** Breastfeeding and complementary feeding ***
 # 
 # //currently breastfed
 df <- df %>%
@@ -266,15 +285,11 @@ df <- df %>%
   ) %>% 
   set_variable_labels(nt_mdd = "Child with minimum dietary diversity, 5 out of 8 food groups- last-born 6-23 months")
 
-# df$nt_mdd = as.factor(df$nt_mdd)
-# df$nt_bf_curr = as.factor(df$nt_bf_curr)
 
+#****PART 3*******
 #******Exposure variable*******#
 
 df <- df %>%
-  # Drop rows where all 4 UPF variables are NA
-  filter(!(is.na(v414t) & is.na(v414r) & is.na(v413c) & is.na(v413d))) %>%
-  
   # Create binary UPF exposure variable
   mutate(upf_consumed = factor(if_else(
     v414t == 1 | v414r == 1 | v413c == 1 | v413d == 1,
@@ -283,15 +298,14 @@ df <- df %>%
     labels = c("No UPF", "Consumed UPF"))) %>%
   
   # Create frequency-based UPF exposure variable
-  mutate(upf_freq = rowSums(across(c(v414t, v414r, v413c, v413d), ~ .x == 1), na.rm = TRUE))
-
-#alternate definition of upf_frequency upf_frq3
-
-df <- df %>%
-  mutate(upf_freq3 = case_when(
-    upf_freq == 0 ~ "none",
-    upf_freq == 1 ~ "low",
-    upf_freq == 2 ~ "mid",
-    upf_freq >= 3 ~ "high", # This covers 3 and 4 (and any higher values if they appeared)
-    TRUE ~ NA_character_ # Catches any other unexpected values, assigning NA
-  ))
+  mutate(upf_freq_count = rowSums(across(c(v414t, v414r, v413c, v413d), ~ .x == 1), na.rm = TRUE),
+         # Collapse categories into 'upf_freq' variable
+         upf_freq = case_when(
+           upf_freq_count == 0 ~ "none",
+           upf_freq_count == 1 ~ "low",
+           upf_freq_count >= 2 ~ "high",
+           TRUE ~ NA_character_
+         ),
+         # Convert to ordered factor for modeling
+         upf_freq = factor(upf_freq, levels = c("none", "low", "high"))
+  )
