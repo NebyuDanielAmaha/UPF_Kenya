@@ -5,6 +5,7 @@ This repository contains R code for analyzing data from the 2022 Kenya Demograph
 ## 📁 Structure
 - `01_recode.R`: R scripts for cleaning and recoding DHS data
 - `02_analysis_tables.R`: R scripts for statistical analysis and table generation
+- `03_stratified_analysis.R`: R scripts for statistical analysis and table generation
 
 - R 4.4+
 
