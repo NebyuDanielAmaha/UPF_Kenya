@@ -9,25 +9,8 @@ This repository contains R code for analyzing data from the 2022 Kenya Demograph
 
 - R 4.4+
 
-## 📦 Required R Packages
-
-```r
-library(haven)
-library(here)
-library(dplyr)
-library(labelled)
-library(naniar)
-library(survey)
-library(regclass)
-library(car)
-library(purrr)
-library(tableone)
-library(epiDisplay)
-library(epitools)
-library(ggplot2)
-
 ## Author
 
-Nebyu D. Amaha, MPH
+Nebyu D. Amaha
 
 **Note**: Access to DHS data requires permission from [https://dhsprogram.com](https://dhsprogram.com).
