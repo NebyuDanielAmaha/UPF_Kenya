@@ -1,91 +1,76 @@
-# 02_analysis_tables.R
-# Purpose: Generate summary tables and models on UPF consumption and nutritional status
-# Author: Nebyu D. Amaha
-# Date: 2025-06-11
+#*TABLES
 
-#Checking for missingness
-
-# Check missing values in all 4 outcome variables at once
-outcome_vars <- c("nt_ch_stunt", "nt_ch_wast", "nt_ch_underwt", "nt_ch_ovwt")
-colSums(is.na(df[outcome_vars]))
-sapply(df[outcome_vars], function(x) round(mean(is.na(x))*100, 1))
-
-#UPF variables
-upf_vars <- c("v414t", "v414r", "v413c", "v413d")
-colSums(is.na(df[upf_vars]))
-sapply(df[upf_vars], function(x) round(mean(is.na(x))*100, 1))
-
-
-
-# Create the survey design object
-svy_design <- svydesign(
-  ids = ~v021,         # Cluster variable
-  strata = ~v022,      # Stratification variable 
-  weights = ~wt,       # Your weight variable
-  data = df,           # Your dataframe
-  nest = TRUE          # For DHS data
+# List the key covariates you want to keep complete (excluding nt_mdd and bmi_cat)
+complete_vars <- c(
+  "upf_consumed",
+  "child_agegrp",
+  "sex",
+  "birth",
+  "mom_agegrp",
+  "mom_edu",
+  "working",
+  "anc_cat2",
+  "bmi_cat",
+  "wealth",
+  "residence",
+  "hhnum",
+  "ph_wtr_improve",
+  "ph_sani_improve",
+  "nt_bf_curr",
+  "fever",
+  "diarrhea",
+  "nt_mdd" 
 )
 
-# Check the design
-summary(svy_design)
+# Filter to keep only complete cases for the selected variables
+df_clean <- df %>% filter(if_all(all_of(complete_vars), ~ !is.na(.)))
 
-#Checking for multicollinearity 
-#sunting
-model <- glm(
-  model_formula_stunt,
-  data = df,
-  family = binomial()  # For binary outcome
-)
-vif(model)
+#check how many were dropped
+n_original <- nrow(df)
+n_clean <- nrow(df_clean)
+cat("Dropped", n_original - n_clean, "cases due to missing covariates.\n")
 
-#wast
-model <- glm(
-  model_formula_wast,
-  data = df,
-  family = binomial()  # For binary outcome
-)
-vif(model)
-
-#underwt
-model <- glm(
-  model_formula_underwt,
-  data = df,
-  family = binomial()  # For binary outcome
-)
-vif(model)
-
-#ovwt
-model <- glm(
-  model_formula_ovwt,
-  data = df,
-  family = binomial()  # For binary outcome
-)
-vif(model)
 
 #TABLE 1
 #Define variables
-vars <- c("age", "sex", "child_agegrp", "mom_agegrp", "wealth", 
-          "residence", "ph_wtr_improve", "ph_sani_improve",
-          "nt_mdd", "nt_bf_curr", "fever", "diarrhea")
+# Define all variables you want in the table
+vars <- c("age", "sex", "child_agegrp", "birth", "mom_agegrp", "mom_edu", "working", 
+          "anc_cat2", "bmi_cat", "wealth", "residence", "hhnum",
+          "ph_wtr_improve", "ph_sani_improve", "nt_mdd", "nt_bf_curr",
+          "fever", "diarrhea", "upf_consumed")  # include exposure if needed
 
 #Specify categorical variables
-cat_vars <- c("sex", "child_agegrp", "mom_agegrp", "wealth", "residence",
-              "ph_wtr_improve", "ph_sani_improve", "nt_mdd", "nt_bf_curr",
-              "fever", "diarrhea")
+cat_vars <- c(
+  "upf_consumed",
+  "child_agegrp",
+  "sex",
+  "birth",
+  "mom_agegrp",
+  "mom_edu",
+  "working",
+  "anc_cat2",
+  "bmi_cat",
+  "wealth",
+  "residence",
+  "hhnum",
+  "ph_wtr_improve",
+  "ph_sani_improve",
+  "nt_mdd",
+  "nt_bf_curr",
+  "fever",
+  "diarrhea"
+)
 
-#Create Table 1
+# Run Table 1
 table1 <- CreateTableOne(
   vars = vars,
   factorVars = cat_vars,
-  data = df,
+  data = df_clean,
   includeNA = FALSE
 )
-#print table 1
-print(table1, 
-      catDigits = 1,
-      contDigits = 1,
-      showAllLevels = TRUE,
-      quote = FALSE)
+
+print(table1, catDigits = 1, contDigits = 1, showAllLevels = TRUE, quote = FALSE)
+
 
 #TABLE 2
 #Ensure upf_consumed is factor
@@ -93,7 +78,7 @@ table2 <- CreateTableOne(
   vars = vars,
   factorVars = cat_vars,
   strata = "upf_consumed",
-  data = df,
+  data = df_clean,
   includeNA = FALSE
 )
 #With chi-square
@@ -107,8 +92,26 @@ print(table2,
       format = "fp",       # Format as count (percentage)
       quote = FALSE)
 
+#Table 3
 
-#TABLE 3
+# Build model formulas for each outcome
+outcomes <- c("nt_ch_stunt", "nt_ch_wast", "nt_ch_underwt", "nt_ch_ovwt")
+
+svy_design <- svydesign(
+  ids = ~v021,
+  strata = ~v022,
+  weights = ~wt,
+  data = df_clean,  # Make sure df contains all needed variables
+  nest = TRUE
+)
+
+model_formulas <- setNames(
+  lapply(outcomes, function(outcome) {
+    as.formula(paste(outcome, "~ upf_consumed +", paste(cat_vars, collapse = " + ")))
+  }),
+  outcomes
+)
+
 detailed_analysis <- function(formula) {
   model <- svyglm(
     formula = formula,
@@ -142,57 +145,57 @@ detailed_analysis <- function(formula) {
 }
 
 detailed_results <- map_dfr(model_formulas, detailed_analysis, .id = "outcome")
-print(detailed_results,n=92)
+print(detailed_results,n=120)
 
-#TABLE 4
+#TABLE 5
 
 # Ensure survey design contains all variables
 svy_design <- svydesign(
   ids = ~v021,
   strata = ~v022,
   weights = ~wt,
-  data = df,  # Make sure df contains all needed variables
+  data = df_clean,  # Make sure df contains all needed variables
   nest = TRUE
 )
 
-# Define common covariates
-covariates <- c("child_agegrp", "sex", "birth", "mom_agegrp", "fever", "diarrhea",
-                "working", "anc_cat2", "wealth", "residence", "hhnum",
-                "ph_wtr_improve", "ph_sani_improve", "nt_mdd", "nt_bf_curr")
 
 # 3. Analyze all outcomes
-outcomes <- c("nt_ch_stunt", "nt_ch_wast", "nt_ch_underwt", "nt_ch_ovwt")
+# Analyze all outcomes
 results <- lapply(outcomes, function(outcome) {
-  formula <- as.formula(paste(outcome, "~ upf_freq +", paste(covariates, collapse = "+")))
+  formula <- as.formula(paste(outcome, "~ upf_freq +", paste(vars, collapse = "+")))
   
   model <- svyglm(formula, design = svy_design, family = quasibinomial())
   
-  # Extract UPF frequency results
-  coef <- summary(model)$coefficients["upf_freq", ]
+  coef_summary <- summary(model)$coefficients
+  
+  # Get rows matching UPF frequency levels
+  upf_terms <- rownames(coef_summary)[grepl("^upf_freq", rownames(coef_summary))]
+  
+  # For each level (excluding reference), extract ORs
   data.frame(
     Outcome = outcome,
-    Term = "UPF Frequency (0-4)",
-    OR = exp(coef["Estimate"]),
-    Lower_CI = exp(coef["Estimate"] - 1.96 * coef["Std. Error"]),
-    Upper_CI = exp(coef["Estimate"] + 1.96 * coef["Std. Error"]),
-    p_value = coef["Pr(>|t|)"],
+    Term = upf_terms,
+    OR = exp(coef_summary[upf_terms, "Estimate"]),
+    Lower_CI = exp(coef_summary[upf_terms, "Estimate"] - 1.96 * coef_summary[upf_terms, "Std. Error"]),
+    Upper_CI = exp(coef_summary[upf_terms, "Estimate"] + 1.96 * coef_summary[upf_terms, "Std. Error"]),
+    p_value = coef_summary[upf_terms, "Pr(>|t|)"],
     stringsAsFactors = FALSE
   )
 })
 
-# 4. Combine results
+# Combine into one table
 final_results <- do.call(rbind, results)
 print(final_results)
 
 
 
-#TABLE 5
+#TABLE 6
 upf_foods <- c("v413c", "v413d", "v414r", "v414t")
 food_labels <- c("Chocholate-flavored drink", "Sodas/malt/energy drinks", "Chocolates/sweets/candies", "Chips/crisps/fries")
 
 
 food_results <- lapply(1:4, function(i) {
-  formula <- as.formula(paste("nt_ch_wast ~", upf_foods[i], "+", paste(covariates, collapse = "+")))
+  formula <- as.formula(paste("nt_ch_wast ~", upf_foods[i], "+", paste(vars, collapse = "+")))
   
   model <- svyglm(
     formula = formula,
@@ -222,82 +225,3 @@ food_analysis[, 3:6] <- round(food_analysis[, 3:6], 3)
 # 5. Present clean results
 cat("\nAssociation between specific UPF foods and wasting (nt_ch_wast):\n")
 print(food_analysis, row.names = FALSE)
-
-
-#Checking power of the study
-# Combine rare categories (recommended)
- df$soda_consumption <- case_when(
-   df$v413d == 1 ~ "Yes",
-   df$v413d %in% c(0,8) ~ "No",  # Assuming 8=missing/no
-   TRUE ~ NA_character_
- )
-
-# Verify
- table(df$soda_consumption, useNA = "always") 
- df <- df %>% 
-   mutate(soda = case_when(
-     v413d == 1 ~ "Yes",
-     v413d == 0 ~ "No",
-     TRUE ~ NA_character_  # Treat 8 ("don't know") as missing
-   ))
-
- # Check revised counts
- table(df$soda, df$nt_ch_wast, useNA = "always")
- 
- fisher.test(table(df$soda, df$nt_ch_wast))
-
-
- # Subset design to exclude missing
- svy_sub <- subset(svy_design, v413d %in% 0:1)
- 
- # Run model with warning
- if(sum(df$v413d==1 & df$nt_ch_wast==1, na.rm=TRUE) >= 5) {
-   svyglm(nt_ch_wast ~ soda, design=svy_sub, family=quasibinomial()) %>% 
-     summary()
- } else {
-   message("Insufficient cases for reliable regression (only ", 
-           sum(df$v413d==1 & df$nt_ch_wast==1), " exposed cases)")
- }
-
-
- #Graph the consumption of UPF with nutritional status of children 
- # Data frame for bar plot
- df <- data.frame(
-   Age_Group = rep(c("6-11 months", "12-17 months", "18-23 months"), each = 2),
-   UPF = rep(c("Yes", "No"), 3),
-   Percentage = c(
-     13.7, 86.3,  # 6-11 months: Yes, No
-     27.1, 72.9,  # 12-17 months: Yes, No
-     33.2, 66.8   # 18-23 months: Yes, No
-   )
- )
-
-# Ensure Age_Group is a factor with correct order
- df$Age_Group <- factor(df$Age_Group, levels = c("6-11 months", "12-17 months", "18-23 months"))
- 
- # Create stacked bar plot
- ggplot(df, aes(x = Age_Group, y = Percentage, fill = UPF)) +
-   geom_bar(stat = "identity", position = "stack") +
-   geom_text(aes(label = sprintf("%.1f%%", Percentage)), 
-             position = position_stack(vjust = 0.5), size = 3.5, color = "white") +
-   scale_fill_manual(values = c("Yes" = "#F44336", "No" = "#4CAF50"), 
-                     labels = c("Yes", "No")) +
-   theme_minimal() +
-   labs(
-     title = "UPF Consumption by Age Group in Kenyan Children (KDHS 2022)",
-     subtitle = "Percentage of Children with Yes/No UPF Consumption (n = 2,824)",
-     x = "Age Group (Months)",
-     y = "Percentage (%)",
-     fill = "UPF Consumption",
-     caption = "Data from Table 2, p < 0.001 for age group differences"
-   ) +
-   theme(
-     plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-     plot.subtitle = element_text(hjust = 0.5, size = 12),
-     plot.caption = element_text(hjust = 0, size = 10),
-     axis.text.x = element_text(size = 10),
-     axis.text.y = element_text(size = 10),
-     legend.position = "top"
-   )
- ggsave("upf_by_age_bar_plot.png", width = 8, height = 6, dpi = 300)
- 
